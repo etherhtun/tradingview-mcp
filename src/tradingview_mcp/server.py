@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 # Import bollinger band screener modules
 from tradingview_mcp.core.services.indicators import compute_metrics
 from tradingview_mcp.core.services.coinlist import load_symbols
-from tradingview_mcp.core.utils.validators import sanitize_timeframe, sanitize_exchange, EXCHANGE_SCREENER, ALLOWED_TIMEFRAMES
+from tradingview_mcp.core.utils.validators import sanitize_timeframe, sanitize_exchange, EXCHANGE_SCREENER, ALLOWED_TIMEFRAMES, STOCK_EXCHANGES, is_stock_exchange, get_market_type
 
 try:
     from tradingview_ta import TA_Handler, get_multiple_analysis
@@ -235,7 +235,8 @@ def _fetch_multi_changes(exchange: str, timeframes: List[str] | None, base_timef
 			cols.append(c)
 			seen.add(c)
 
-	q = Query().set_markets("crypto").select(*cols)
+	market = get_market_type(exchange) if exchange else "crypto"
+	q = Query().set_markets(market).select(*cols)
 	if exchange:
 		q = q.where(Column("exchange") == exchange.upper())
 	if limit:
@@ -266,17 +267,22 @@ def _fetch_multi_changes(exchange: str, timeframes: List[str] | None, base_timef
 
 
 mcp = FastMCP(
-	name="TradingView Screener",
-	instructions=("Crypto screener utilities backed by TradingView Screener. Tools: top_gainers, top_losers, multi_changes."),
+	name="TradingView Multi-Market Screener",
+	instructions=(
+		"Multi-market screener backed by TradingView. "
+		"Supports crypto exchanges (KuCoin, Binance, Bybit, etc.) and stock markets (EGX, BIST, NASDAQ, NYSE, Bursa Malaysia, HKEX). "
+		"Tools: top_gainers, top_losers, bollinger_scan, coin_analysis, multi_agent_analysis, "
+		"volume_breakout_scanner, egx_market_overview, egx_sector_scan, and more."
+	),
 )
 
 
 @mcp.tool()
 def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
     """Return top gainers for an exchange and timeframe using bollinger band analysis.
-    
+
     Args:
-        exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
+        exchange: Exchange name - crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
         timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         limit: Number of rows to return (max 50)
     """
@@ -295,7 +301,7 @@ def top_gainers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 2
 
 @mcp.tool()
 def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25) -> list[dict]:
-    """Return top losers for an exchange and timeframe using bollinger band analysis."""
+    """Return top losers for an exchange and timeframe. Supports crypto (KUCOIN, BINANCE) and stocks (EGX, BIST, NASDAQ)."""
     exchange = sanitize_exchange(exchange, "KUCOIN")
     timeframe = sanitize_timeframe(timeframe, "15m")
     limit = max(1, min(limit, 50))
@@ -314,11 +320,11 @@ def top_losers(exchange: str = "KUCOIN", timeframe: str = "15m", limit: int = 25
 
 @mcp.tool()
 def bollinger_scan(exchange: str = "KUCOIN", timeframe: str = "4h", bbw_threshold: float = 0.04, limit: int = 50) -> list[dict]:
-    """Scan for coins with low Bollinger Band Width (squeeze detection).
-    
+    """Scan for assets with low Bollinger Band Width (squeeze detection). Works with crypto and stocks (EGX, BIST, etc.).
+
     Args:
-        exchange: Exchange name like KUCOIN, BINANCE, BYBIT, etc.
-        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M  
+        exchange: Exchange - crypto: KUCOIN, BINANCE, BYBIT; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
         bbw_threshold: Maximum BBW value to filter (default 0.04)
         limit: Number of rows to return (max 100)
     """
@@ -364,15 +370,15 @@ def coin_analysis(
     exchange: str = "KUCOIN",
     timeframe: str = "15m"
 ) -> dict:
-    """Get detailed analysis for a specific coin on specified exchange and timeframe.
-    
+    """Get detailed analysis for a specific asset (coin or stock) on specified exchange and timeframe.
+
     Args:
-        symbol: Coin symbol (e.g., "ACEUSDT", "BTCUSDT")
-        exchange: Exchange name (BINANCE, KUCOIN, etc.) 
+        symbol: Symbol - crypto: "BTCUSDT", "ETHUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST)
+        exchange: Exchange - crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE, BURSA, HKEX
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W, 1M)
-    
+
     Returns:
-        Detailed coin analysis with all indicators and metrics
+        Detailed analysis with all indicators and metrics
     """
     try:
         exchange = sanitize_exchange(exchange, "KUCOIN")
@@ -893,7 +899,8 @@ def _fetch_multi_timeframe_patterns(exchange: str, symbols: List[str], base_tf: 
             "RSI"
         ]
         
-        q = Query().set_markets("crypto").select(*cols)
+        market = get_market_type(exchange)
+        q = Query().set_markets(market).select(*cols)
         q = q.where(Column("exchange") == exchange.upper())
         q = q.limit(len(symbols))
         
@@ -968,9 +975,9 @@ def exchanges_list() -> str:
                 return f"Available exchanges: {', '.join(sorted(exchanges))}"
         
         # Fallback to static list
-        return "Common exchanges: KUCOIN, BINANCE, BYBIT, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, NASDAQ"
+        return "Common exchanges: KUCOIN, BINANCE, BYBIT, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, EGX, NASDAQ"
     except Exception:
-        return "Common exchanges: KUCOIN, BINANCE, BYBIT, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, NASDAQ"
+        return "Common exchanges: KUCOIN, BINANCE, BYBIT, BITGET, OKX, COINBASE, GATEIO, HUOBI, BITFINEX, KRAKEN, BITSTAMP, BIST, EGX, NASDAQ"
 def main() -> None:
 	parser = argparse.ArgumentParser(description="TradingView Screener MCP server")
 	parser.add_argument("transport", choices=["stdio", "streamable-http"], default="stdio", nargs="?", help="Transport (default stdio)")
@@ -1104,21 +1111,30 @@ def volume_confirmation_analysis(symbol: str, exchange: str = "KUCOIN", timefram
 	"""
 	exchange = sanitize_exchange(exchange, "KUCOIN")
 	timeframe = sanitize_timeframe(timeframe, "15m")
-	
-	if not symbol.upper().endswith('USDT'):
+
+	# Only append USDT for crypto exchanges, not stock markets
+	if not is_stock_exchange(exchange) and not symbol.upper().endswith('USDT'):
 		symbol = symbol.upper() + 'USDT'
-	
+	else:
+		symbol = symbol.upper()
+
+	# Format with exchange prefix for stock markets
+	if is_stock_exchange(exchange) and ":" not in symbol:
+		full_symbol = f"{exchange.upper()}:{symbol}"
+	else:
+		full_symbol = symbol
+
 	screener = EXCHANGE_SCREENER.get(exchange, "crypto")
-	
+
 	try:
-		analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[symbol])
-		
-		if not analysis or symbol not in analysis:
-			return {"error": f"No data found for {symbol}"}
+		analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=[full_symbol])
+
+		if not analysis or full_symbol not in analysis:
+			return {"error": f"No data found for {full_symbol}"}
 			
-		data = analysis[symbol]
+		data = analysis[full_symbol]
 		if not data or not hasattr(data, 'indicators'):
-			return {"error": f"No indicator data for {symbol}"}
+			return {"error": f"No indicator data for {full_symbol}"}
 			
 		indicators = data.indicators
 		
@@ -1351,10 +1367,10 @@ def multi_agent_analysis(
     timeframe: str = "15m"
 ) -> dict:
     """Run a multi-agent debate (Technical, Sentiment, Risk) for a specific symbol.
-    
+
     Args:
-        symbol: Coin symbol (e.g., "BTCUSDT")
-        exchange: Exchange name (BINANCE, KUCOIN, etc.) 
+        symbol: Symbol - crypto: "BTCUSDT"; stocks: "COMI" (EGX), "THYAO" (BIST)
+        exchange: Exchange - crypto: KUCOIN, BINANCE; stocks: EGX, BIST, NASDAQ, NYSE
         timeframe: Time interval (5m, 15m, 1h, 4h, 1D, 1W)
     
     Returns:
@@ -1458,6 +1474,175 @@ def multi_agent_analysis(
         
     except Exception as e:
         return {"error": f"Multi-agent analysis failed: {str(e)}"}
+
+
+@mcp.tool()
+def egx_market_overview(timeframe: str = "1D", limit: int = 10) -> dict:
+    """Get a comprehensive overview of the Egyptian Exchange (EGX) market.
+
+    Shows top gainers, top losers, and most active stocks on EGX.
+
+    Args:
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M (default 1D for stocks)
+        limit: Number of stocks per category (max 20)
+    """
+    if not TRADINGVIEW_TA_AVAILABLE:
+        return {"error": "tradingview_ta is missing; run `uv sync`."}
+
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    limit = max(1, min(limit, 20))
+
+    symbols = load_symbols("egx")
+    if not symbols:
+        return {"error": "No EGX symbols found. Check coinlist/egx.txt"}
+
+    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+
+    all_stocks = []
+    batch_size = 200
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i:i + batch_size]
+        try:
+            analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=batch)
+        except Exception:
+            continue
+
+        for sym, data in analysis.items():
+            if data is None:
+                continue
+            try:
+                indicators = data.indicators
+                metrics = compute_metrics(indicators)
+                if not metrics:
+                    continue
+
+                volume = indicators.get("volume", 0)
+                all_stocks.append({
+                    "symbol": sym,
+                    "price": metrics.get("price", 0),
+                    "changePercent": metrics.get("change", 0),
+                    "volume": volume,
+                    "rsi": round(indicators.get("RSI", 0) or 0, 2),
+                    "bbw": metrics.get("bbw", 0),
+                    "rating": metrics.get("rating", 0),
+                    "signal": metrics.get("signal", "N/A"),
+                })
+            except Exception:
+                continue
+
+    if not all_stocks:
+        return {"error": "No data returned for EGX stocks", "timeframe": timeframe}
+
+    # Sort for different views
+    by_change = sorted(all_stocks, key=lambda x: x["changePercent"], reverse=True)
+    by_volume = sorted(all_stocks, key=lambda x: x["volume"] or 0, reverse=True)
+
+    return {
+        "exchange": "EGX",
+        "timeframe": timeframe,
+        "total_analyzed": len(all_stocks),
+        "top_gainers": by_change[:limit],
+        "top_losers": by_change[-limit:][::-1],
+        "most_active": by_volume[:limit],
+        "market_stats": {
+            "advancing": len([s for s in all_stocks if s["changePercent"] > 0]),
+            "declining": len([s for s in all_stocks if s["changePercent"] < 0]),
+            "unchanged": len([s for s in all_stocks if s["changePercent"] == 0]),
+            "avg_change": round(sum(s["changePercent"] for s in all_stocks) / len(all_stocks), 2) if all_stocks else 0,
+        }
+    }
+
+
+@mcp.tool()
+def egx_sector_scan(
+    sector: str = "",
+    timeframe: str = "1D",
+    limit: int = 20
+) -> dict:
+    """Scan EGX stocks by sector. Shows available sectors if none specified.
+
+    Args:
+        sector: Sector name - banks, real_estate, financial_services, food_and_beverages,
+                construction_and_materials, telecommunications, energy_and_utilities,
+                healthcare_and_pharma, industrial, technology, tourism_and_entertainment,
+                textiles_and_clothing, chemicals, transportation_and_logistics.
+                Leave empty to list all sectors.
+        timeframe: One of 5m, 15m, 1h, 4h, 1D, 1W, 1M
+        limit: Max results per sector (max 50)
+    """
+    from tradingview_mcp.core.data.egx_sectors import get_all_sectors, get_symbols_by_sector, get_sector
+
+    if not sector:
+        sectors = get_all_sectors()
+        return {
+            "available_sectors": sectors,
+            "usage": "Pass a sector name to scan. Example: sector='banks'"
+        }
+
+    if not TRADINGVIEW_TA_AVAILABLE:
+        return {"error": "tradingview_ta is missing; run `uv sync`."}
+
+    timeframe = sanitize_timeframe(timeframe, "1D")
+    limit = max(1, min(limit, 50))
+
+    sector_key = sector.strip().lower().replace(" ", "_")
+    symbols = get_symbols_by_sector(sector_key)
+
+    if not symbols:
+        return {
+            "error": f"Unknown sector: {sector}",
+            "available_sectors": get_all_sectors()
+        }
+
+    screener = EXCHANGE_SCREENER.get("egx", "egypt")
+
+    try:
+        analysis = get_multiple_analysis(screener=screener, interval=timeframe, symbols=symbols)
+    except Exception as e:
+        return {"error": f"Analysis failed: {str(e)}"}
+
+    results = []
+    for sym, data in analysis.items():
+        if data is None:
+            continue
+        try:
+            indicators = data.indicators
+            metrics = compute_metrics(indicators)
+            if not metrics:
+                continue
+
+            results.append({
+                "symbol": sym,
+                "sector": get_sector(sym),
+                "price": metrics.get("price", 0),
+                "changePercent": metrics.get("change", 0),
+                "volume": indicators.get("volume", 0),
+                "rsi": round(indicators.get("RSI", 0) or 0, 2),
+                "bbw": metrics.get("bbw", 0),
+                "rating": metrics.get("rating", 0),
+                "signal": metrics.get("signal", "N/A"),
+                "bb_upper": round(indicators.get("BB.upper", 0) or 0, 4),
+                "bb_lower": round(indicators.get("BB.lower", 0) or 0, 4),
+                "sma20": round(indicators.get("SMA20", 0) or 0, 4),
+                "ema50": round(indicators.get("EMA50", 0) or 0, 4),
+            })
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x["changePercent"], reverse=True)
+
+    sector_change = [r["changePercent"] for r in results if r["changePercent"] is not None]
+    avg_change = round(sum(sector_change) / len(sector_change), 2) if sector_change else 0
+
+    return {
+        "exchange": "EGX",
+        "sector": sector_key,
+        "timeframe": timeframe,
+        "total_stocks": len(results),
+        "sector_avg_change": avg_change,
+        "sector_sentiment": "Bullish" if avg_change > 0.5 else "Bearish" if avg_change < -0.5 else "Neutral",
+        "data": results[:limit],
+    }
 
 
 if __name__ == "__main__":
