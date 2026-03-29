@@ -30,6 +30,12 @@ https://github-production-user-asset-6210df.s3.amazonaws.com/67838093/478689497-
 
 ---
 
+## 🏗️ Architecture
+
+![tradingview-mcp Architecture](assets/architecture.png)
+
+---
+
 ## ✨ Why tradingview-mcp?
 
 | Feature | `tradingview-mcp` | Traditional Setups | Bloomberg Terminal |
