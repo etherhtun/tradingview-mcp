@@ -19,7 +19,7 @@ from tradingview_mcp.core.services.proxy_manager import build_opener_with_proxy,
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-_USER_AGENT = "tradingview-mcp/0.5.0 sentiment-bot"
+_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 _TIMEOUT = 10
 
 BULLISH_KEYWORDS = [
@@ -48,7 +48,7 @@ def _fetch_reddit_posts(subreddit: str, query: str, limit: int = 10) -> list:
     """Fetch posts from a subreddit search. Returns raw Reddit post data list."""
     url = (
         f"https://www.reddit.com/r/{subreddit}/search.json"
-        f"?q={urllib.parse.quote(query)}&sort=new&t=day&limit={limit}"
+        f"?q={urllib.parse.quote(query)}&sort=new&t=week&limit={limit}"
     )
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
