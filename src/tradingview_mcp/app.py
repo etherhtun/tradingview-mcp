@@ -1,14 +1,27 @@
-import asyncio
 from fastapi import FastAPI
-from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from tradingview_mcp.server import server
 
-app = FastAPI(title="Kairos TV Bridge")
+app = FastAPI(title="Kairos Market Intelligence")
 sse = SseServerTransport("/messages")
+
+@app.get("/")
+async def root():
+    """Root endpoint for status verification"""
+    return {
+        "status": "online",
+        "system": "Kairos Market Intelligence",
+        "endpoints": ["/sse", "/messages", "/health"]
+    }
+
+@app.get("/health")
+async def health():
+    """Health check for Render/Koyeb"""
+    return {"status": "healthy"}
 
 @app.get("/sse")
 async def endpoint():
+    """Main MCP SSE entry point"""
     async with sse.connect_scope() as scope:
         await server.run(
             sse.read_stream,
@@ -18,6 +31,7 @@ async def endpoint():
 
 @app.post("/messages")
 async def messages():
+    """Handle MCP client messages"""
     await sse.handle_post_request()
 
 if __name__ == "__main__":
