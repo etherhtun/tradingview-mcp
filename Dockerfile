@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Run the MCP server over streamable-http (ideal for Docker/remote deployments)
-ENTRYPOINT ["tradingview-mcp"]
+ENTRYPOINT ["tradingview-mcp-web"]
